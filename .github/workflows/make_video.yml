@@ -14,7 +14,6 @@ on:
 
 permissions:
   contents: read
-  models: read
 
 jobs:
   build:
@@ -35,7 +34,7 @@ jobs:
 
       - name: Make the video
         env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
           TOPIC: ${{ inputs.topic }}
           SCENES: ${{ inputs.scenes }}
         run: python main.py
