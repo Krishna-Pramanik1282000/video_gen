@@ -1,6 +1,6 @@
 """
 Free stick-figure explainer video maker.
-Topic -> script (GitHub Models, free) -> voice (edge-tts, free)
+Topic -> script (Gemini free tier) -> voice (edge-tts, free)
       -> stick-figure pictures (Pillow) -> video (ffmpeg).
 Runs on GitHub Actions. Output: output/final.mp4 + output/info.txt
 """
@@ -59,40 +59,34 @@ Vary bg, pose and prop from scene to scene and choose ones that fit the words.""
 
 # ---------------------------------------------------------------- script ---
 def ask_llm(prompt):
-    token = os.environ.get("GITHUB_TOKEN", "")
-    models = [os.environ.get("MODEL", "openai/gpt-4.1"), "openai/gpt-4o", "openai/gpt-4o-mini"]
+    key = os.environ.get("GEMINI_API_KEY", "").strip()
+    if not key:
+        raise SystemExit("GEMINI_API_KEY is missing. Add it in the repo: "
+                         "Settings > Secrets and variables > Actions.")
+    models = [m for m in (os.environ.get("GEMINI_MODEL"), "gemini-2.5-flash",
+                          "gemini-2.5-flash-lite", "gemini-3-flash-preview") if m]
     last = None
     for m in models:
-        try:
-            r = requests.post(
-                "https://models.github.ai/inference/chat/completions",
-                headers={
-                    "Authorization": f"Bearer {token}",
-                    "Content-Type": "application/json",
-                    "Accept": "application/vnd.github+json",
-                    "X-GitHub-Api-Version": "2022-11-28",
-                },
-                json={"model": m, "temperature": 0.8,
-                      "messages": [{"role": "user", "content": prompt}]},
-                timeout=180,
-            )
-            r.raise_for_status()
-            return r.json()["choices"][0]["message"]["content"]
-        except Exception as e:  # try the next model
-            last = e
-            print(f"[llm] {m} failed: {e}")
-    key = os.environ.get("GEMINI_API_KEY")  # optional backup, also free
-    if key:
-        gm = os.environ.get("GEMINI_MODEL", "gemini-2.5-flash")
-        r = requests.post(
-            f"https://generativelanguage.googleapis.com/v1beta/models/{gm}:generateContent",
-            params={"key": key},
-            json={"contents": [{"parts": [{"text": prompt}]}]},
-            timeout=180,
-        )
-        r.raise_for_status()
-        return r.json()["candidates"][0]["content"]["parts"][0]["text"]
-    raise SystemExit(f"Could not get a script from the AI: {last}")
+        for attempt in range(2):
+            try:
+                r = requests.post(
+                    f"https://generativelanguage.googleapis.com/v1beta/models/{m}:generateContent",
+                    headers={"x-goog-api-key": key},
+                    json={"contents": [{"parts": [{"text": prompt}]}],
+                          "generationConfig": {"responseMimeType": "application/json",
+                                               "temperature": 0.8}},
+                    timeout=180,
+                )
+                r.raise_for_status()
+                parts = r.json()["candidates"][0]["content"]["parts"]
+                text = "".join(p.get("text", "") for p in parts)
+                if text.strip():
+                    return text
+            except Exception as e:  # retry, then try the next model
+                last = e
+                print(f"[llm] {m} attempt {attempt + 1} failed: {e}")
+                time.sleep(5)
+    raise SystemExit(f"Could not get a script from Gemini: {last}")
 
 
 def get_script():
