@@ -1,0 +1,49 @@
+name: Generate Educational Video
+
+on:
+  workflow_dispatch:
+    inputs:
+      topic:
+        description: "Educational Topic"
+        required: true
+        default: "Government of India Act 1935: Federalism, Autonomy, and Governors"
+      voice:
+        description: "Voice Name (e.g. en-IN-NeerjaNeural, en-US-GuyNeural)"
+        required: false
+        default: "en-IN-NeerjaNeural"
+
+jobs:
+  build:
+    runs-on: ubuntu-24.04
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Setup Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+          cache: "pip"
+
+      - name: Install FFmpeg
+        run: sudo apt-get update && sudo apt-get install -y ffmpeg
+
+      - name: Install Python Dependencies
+        run: pip install -r requirements.txt
+
+      - name: Run Video Generator
+        env:
+          GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
+          VIDEO_TOPIC: ${{ github.event.inputs.topic }}
+          VOICE_NAME: ${{ github.event.inputs.voice }}
+        run: python main.py
+
+      - name: Upload Video Artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: educational-video
+          path: |
+            output/final.mp4
+            output/info.txt
+          if-no-files-found: error
